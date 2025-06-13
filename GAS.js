@@ -42,17 +42,42 @@ function matchPdfUsingINumericPrice() {
 
 }
 function matchPdfUsingINumericPrice2() {
+  function getDisp(v,ib=0){
+    let nn=v, ret='';
+    while(v>999){ let rem=v % 1000; v/=1000; v=Math.floor(v); ret=''+rem+','+ret;    }
+    ret=''+v+','+ret;
+    let len=ret.length; ret=ret.substring(0,len-1)
+    if(ib && nn>=10000){ ret=ret.substring(0,len-1-5)+'億'+ret.substring(len-1-5);    }
+    return ret;
+  }
   function getFileFromPrice(pr){
     const fs=[];
     for(let di in dic){ if( dic[di]['price']==pr) fs.push(di);    }
-    if( len(fs)==0){
-      for (let fn in invalidFiles)
-            match=re.search(rf'\b{pr}(万|\b)', dic[fn]['text'])
-            if match:
-                fs.append(fn)
+    if( fs.length==0){
+      for (let fn in invalidFiles){
+        let pat=getDisp(pr);
+        let pattern = `\\b${pat}(万|\\b)`, text;
+        text=dic[fn].text?dic[fn].text:'';
+        let regex = new RegExp(pattern), match=text.match(pattern);
+        if (match) fs.push(fn);
+        else{
+          pat=getDisp(pr, 1); pattern = `\\b${pat}(万|\\b)`; regex = new RegExp(pattern); match=text.match(pattern);
+          if(match){ fs.push(fn);}
+        }
+      }
     }
     return fs;
   }
+  function getFileFromAddr(addr){
+    const fs=[];
+    for(let di in dic){
+      let pattern = `\\b${addr}\\b`;
+      let regex = new RegExp(pattern), match=dic[fn].text.match(pattern);
+      if (match) fs.push(fn);
+    }
+    return fs;
+  }
+  
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const data = sheet.getDataRange().getValues();
   const dic={}, invalidFiles=[];
@@ -60,7 +85,7 @@ function matchPdfUsingINumericPrice2() {
   const allFile = allFiles.next();
   const allText=allFile.getBlob().getDataAsString();
   const lines=allText.split('\n');
-  dic={}; let fn='';
+  let fn='';
   lines.forEach((line)=>{
     line=line.trim(); if(line=='')return;
     if(line.endsWith('=================')){ fn=line.replace('=================',''); dic[fn]={text:'',price:0};
@@ -80,4 +105,18 @@ function matchPdfUsingINumericPrice2() {
     }
     if (priceValue > 0) dic[fn]['price'] = priceValue; else invalidFiles.push(fn);
   }
+  data.shift();
+  data.forEach((dat)=>{
+    let price=parseInt(dat[8].trim().replace(/,/g,'')), fn='', addr=dat[5].trim();
+    let fs=getFileFromPrice(price);
+    if(fs.length==1)fn=fs[0];
+    else if( fs.length>1){ fn='MULTI_PRICE';
+    }else{
+      fs=getFileFromAddr(addr);
+      if(fs.length==1){fn=fs[0]+'ADDR_MATCH';
+      }else if(fs.length>1) fn='MULTI_ADDR';
+      else fn='NOT_FOUND';
+    }
+    console.log(price, addr, fn);
+  });
 }
