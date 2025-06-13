@@ -7,51 +7,77 @@ function matchPdfUsingINumericPrice() {
   function toHalfWidth(str) {
     return str.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 65248));
   }
-
+  const dic={}, invalidFiles=[];
+  let allText='';
   while (files.hasNext()) {
-    const file = files.next();
-    const textRaw = file.getBlob().getDataAsString();
-    const text = toHalfWidth(textRaw);
-
-    // 金額抽出（万円換算）
-    let priceValue = null;
-    const manMatch = text.match(/([\d,]+)\s*万円/);
+    const fil = files.next(); 
+    const fn=fil.getName();
+    const blob = fil.getBlob();
+    const resource = {
+      title: blob.getName(),
+      mimeType: MimeType.GOOGLE_DOCS
+    };
+    const file = Drive.Files.insert(resource, blob, { ocr: false });
+    const doc = DocumentApp.openById(file.id);
+    const textRaw = doc.getBody().getText();
+    DriveApp.getFileById(file.id).setTrashed(true);
+    const text = toHalfWidth(textRaw).trim(); //console.log(text);
+    allText+=fn+'=================\n'+text+'\n';
+    if(text=='')continue;
+    dic[fn]={ text:text, price:''};
+    const manMatch = text.match(/価\s*格[：:\s]*([\d,億]+)\s*万\s*円/m);
+    let priceValue=0;
     if (manMatch) {
-      priceValue = parseInt(manMatch[1].replace(/,/g, ''), 10);
+      priceValue = parseInt(manMatch[1].replace(/[,億]/g, ''), 10);
     } else {
-      const yenMatch = text.match(/([\d,]+)\s*[円¥]/);
+      const yenMatch = text.match(/価\s*格[：:\s]*([\d,]+)\s*[円¥]/);
       if (yenMatch) {
         priceValue = Math.round(parseInt(yenMatch[1].replace(/,/g, ''), 10) / 10000);
       }
     }
-    if (!priceValue) continue;
+    if (priceValue > 0) dic[fn]['price'] = priceValue; else invalidFiles.push(fn);
+    //break;
+  }
+  DriveApp.createFile('allPdfTxt', allText, MimeType.PLAIN_TEXT);
 
-    // 住所抽出（○○市or区から先頭30文字まで）
-    const addressMatch = text.match(/[^\n\r]*(市|区)[^\n\r]{0,30}/);
-    if (!addressMatch) continue;
-    const pdfAddress = addressMatch[0].trim();
-
-    let matched = false;
-
-    for (let i = 1; i < data.length; i++) {
-      const sheetPrice = parseInt(String(data[i][8]).replace(/[^\d]/g, ''), 10); // I列
-      const sheetAddress = String(data[i][5]).trim(); // F列
-
-      if (!sheetPrice || !sheetAddress) continue;
-
-      if (sheetPrice === priceValue && sheetAddress.includes(pdfAddress)) {
-        const linkFormula = `=HYPERLINK("${file.getUrl()}", "図面")`;
-        sheet.getRange(i + 1, 3).setFormula(linkFormula); // C列に挿入
-        sheet.getRange(i + 1, 7).setValue("✔ 一致");
-        matched = true;
-        break;
+}
+function matchPdfUsingINumericPrice2() {
+  function getFileFromPrice(pr){
+    const fs=[];
+    for(let di in dic){ if( dic[di]['price']==pr) fs.push(di);    }
+    if( len(fs)==0){
+      for (let fn in invalidFiles)
+            match=re.search(rf'\b{pr}(万|\b)', dic[fn]['text'])
+            if match:
+                fs.append(fn)
+    }
+    return fs;
+  }
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const data = sheet.getDataRange().getValues();
+  const dic={}, invalidFiles=[];
+  const allFiles=DriveApp.getFilesByName('allPdfTxt');
+  const allFile = allFiles.next();
+  const allText=allFile.getBlob().getDataAsString();
+  const lines=allText.split('\n');
+  dic={}; let fn='';
+  lines.forEach((line)=>{
+    line=line.trim(); if(line=='')return;
+    if(line.endsWith('=================')){ fn=line.replace('=================',''); dic[fn]={text:'',price:0};
+    }else{ dic[fn].text+=line+'\n'; }
+  });
+  for(let fn in dic){
+    let text=dic[fn].text;
+    const manMatch = text.match(/価\s*格[：:\s]*([\d,億]+)\s*万\s*円/m);
+    let priceValue=0;
+    if (manMatch) {
+      priceValue = parseInt(manMatch[1].replace(/[,億]/g, ''), 10);
+    } else {
+      const yenMatch = text.match(/価\s*格[：:\s]*([\d,]+)\s*[円¥]/);
+      if (yenMatch) {
+        priceValue = Math.round(parseInt(yenMatch[1].replace(/,/g, ''), 10) / 10000);
       }
     }
-
-    if (!matched) {
-      sheet.appendRow([
-        "✖ 不一致", `PDF: ${file.getName()}`, `抽出価格: ${priceValue}`, `抽出住所: ${pdfAddress}`
-      ]);
-    }
+    if (priceValue > 0) dic[fn]['price'] = priceValue; else invalidFiles.push(fn);
   }
 }
