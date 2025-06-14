@@ -8,7 +8,9 @@ function getFileUrlByName(folderId, fileName) {
   if (files.hasNext()) {
     const file = files.next();    const url = file.getUrl();//    Logger.log("File URL: " + url);
     return url;
-  } else {    Logger.log("File not found.");    return null;  }
+  } else {    
+    Logger.log("File not found.");    return null;  
+  }
 }
 function matchPdfUsingINumericPrice() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
