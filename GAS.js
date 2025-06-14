@@ -83,7 +83,7 @@ function matchPdfUsingINumericPrice2() {
   const dic={}, invalidFiles=[];
   const allFiles=DriveApp.getFilesByName('allPdfTxt');
   const allFile = allFiles.next();
-  const allText=allFile.getBlob().getDataAsString();
+  const allText=allFile.getBlob().getDataAsString().replace(/　/g,' ');
   const lines=allText.split('\n');
   let fn='';
   lines.forEach((line)=>{
