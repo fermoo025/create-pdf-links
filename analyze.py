@@ -1,0 +1,185 @@
+import csv
+import re
+import readPdfs as rp
+
+patPrefect = r"^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)"
+dic = {}
+invalidFiles = []
+
+
+def getDisp(v, ib=0):
+    nn = v
+    ret = ""
+    while v > 999:
+        rem = v % 1000
+        v /= 1000
+        v = int(v)
+        ret = "" + rem + "," + ret
+    ret = "" + v + "," + ret
+    len = len(ret)
+    ret = ret[0:-1]
+    if ib and nn >= 10000:
+        ret = ret[0:-6] + "億" + ret[-6:]
+    return ret
+
+
+def getFileFromAddr(addr):
+    fs = []
+    addr = rp.toHalfWidth(addr)
+    addr = addr.replace("丁目", "")
+    addr2 = re.sub(patPrefect, "", patPrefect)
+    addr3 = addr2
+    digits = "一二三四五六七八九"
+    if len(addr2) > 4:
+        ch = addr2[-1]
+        if re.match(r"[1-9]", ch):
+            addr3 = addr2[0:-1] + digits[int(ch) - 1]
+    for di in dic:
+        b = 1
+        if di.startswith("レインズ資料 4180万円.pdf"):
+            b += 1
+        match = re.search(addr, dic[di].text)
+        if match:
+            fs.append(di)
+        else:
+            match = re.search(addr2, dic[di].text)
+            if match:
+                fs.append(di)
+            else:
+                match = re.search(addr3, dic[di].text.match)
+                if match:
+                    fs.append(di)
+    return fs
+
+
+def getFileFromPrice(pr):
+    fs = []
+    for di in dic:
+        if dic[di]["price"] == pr:
+            fs.append(di)
+    if len(fs) == 0:
+        prMan = int(pr / 10000)
+        for fn in invalidFiles:
+            text = dic[fn].text if dic[fn].text else ""
+
+            pat = getDisp(prMan)
+            pattern = f"[^,\\d]${pat}\\s*(万)"
+            match = re.search(pattern, text, re.MULTILINE)
+            if match:
+                fs.append(fn)
+            else:
+                pat = pat.replace(",", "")
+                pattern = f"[^,\\d]${pat}\\s*(万)"
+                match = re.search(pattern, text, re.MULTILINE)
+                if match:
+                    fs.append(fn)
+                else:
+                    pat = getDisp(prMan, 1)
+                    pattern = f"[^億,\\d]${pat}\\s*(万)"
+                    match = re.search(pattern, text, re.MULTILINE)
+                    if match:
+                        fs.append(fn)
+                    else:
+                        pat = getDisp(pr)
+                        pattern = f"[^,\\d]${pat}\\s*(円)"
+                        match = re.search(pattern, text, re.MULTILINE)
+                        if match:
+                            fs.append(fn)
+    return fs
+
+
+def common(csvFil, pdfFolder):
+    allText = ""
+    dic = {}
+    fn = ""
+    invalidFiles = []
+    with open(f"{pdfFolder}/output.txt", "r") as file:
+        allText = file.read()
+    lines = allText.split("\n")
+    for line in lines:
+        line = line.strip()
+        if line == "":
+            continue
+        if line.endswith("================="):
+            fn = line.replace("=================", "")
+            dic[fn] = {"text": "", "price": 0}
+        else:
+            dic[fn]["text"] += line + "\n"
+    lines = []
+    with open(csvFil, newline="") as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            lines.append(row)
+    for fn in dic:
+        text = dic[fn]["text"]
+        manMatch = re.search(
+            r"価\s*格(?:[:\s]|\(\s*税\s*込\s*\))*([\d,億]+)\s*万", text, re.MULTILINE
+        )
+        priceValue = 0
+        if manMatch:
+            priceValue = (
+                int(manMatch.group(1).replace(",", "").replace(r"億", "")) * 10000
+            )
+        else:
+            yenMatch = re.search(
+                r"価\s*格(?:[:\s]|\(\s*税\s*込\s*\))*([\d,]+)\s*[円¥]",
+                text,
+                re.MULTILINE,
+            )
+            if yenMatch:
+                priceValue = int(yenMatch.group(1).replace(",", ""))
+        if priceValue > 0:
+            dic[fn]["price"] = priceValue
+        else:
+            invalidFiles.append(fn)
+    index = 0
+    lines = lines[1:]
+    for dat in lines:
+        txtPrice = rp.toHalfWidth(dat[8]).strip().replace(",", "")
+        multi = 1
+        if "万円" in txtPrice:
+            txtPrice = txtPrice.replace("万円", "")
+            multi = 10000
+        price = int(float(txtPrice) * multi)
+        fn = ""
+        addr = dat[6].strip()
+        fs = getFileFromPrice(price)
+        isPriceMatch = 0
+        fa = []
+        if len(fs) == 1:
+            a = 1
+            if price == 4180:
+                a += 1
+            fa = getFileFromAddr(addr)
+            if fa.length == 1:
+                fn = fa[0]
+                isPriceMatch = 1
+            elif len(fs) > 1:
+                fn = "MULTI_PRICE_ADDR"
+                isPriceMatch = 1
+            else:
+                fn = fa[0]
+        if isPriceMatch == 0:
+            if len(fs) > 1:
+                fn = "MULTI_PRICE"
+            elif len(fs) == 0:
+                fs = getFileFromAddr(addr)
+                if len(fs) == 1:
+                    fn = "ADDR_MATCH" + fs[0]
+                elif len(fs) > 1:
+                    fn = "MULTI_ADDR"
+                else:
+                    fn = "NOT_FOUND"
+            else:  # // fs.length=1 & fa.length=0
+                fn = "PRICE_FOUND_BUT_ADDR_MISMATCH"
+        if fn.endswith(".pdf"):
+            rn = fn
+            if rn.indexOf("ADDR_MATCH") == 0:
+                rn = rn[10:]
+            # url = getFileUrlByName(FOLDER_ID, rn)
+            # sheet.getRange(index + 2, 3).setValue(url)
+        print(f"{price}\t{addr}\t{fn}")
+
+
+if __name__ == "__main__":
+    common("250615.csv", "1c6l8cZRLqtbeyyvKlp9Nm2xOJHNkaDBf")

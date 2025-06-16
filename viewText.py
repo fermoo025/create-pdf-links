@@ -20,7 +20,7 @@ def readPdf2(fileName):
 def readPdf3(fileName):
     return extract_text(fileName)
 
-file='pdfs/【マイソク】キヨモトビル.pdf'
+file='1c6l8cZRLqtbeyyvKlp9Nm2xOJHNkaDBf/6555物件概要書【戸建片面】20250410.pdf'
 text=readPdf3(file).strip()
 print(text)
     

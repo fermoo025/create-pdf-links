@@ -69,7 +69,7 @@ def download_sheet_as_csv(service, spreadsheet_id, sheet_name, file_name):
     if not values:
         print('No data found.')
         return 0
-    with open(file_name, 'w', newline='', encoding='utf-8') as f:
+    with open(file_name, 'w', newline='', encoding='utf-8-sig') as f:
         writer = csv.writer(f)
         writer.writerows(values)
     return 1

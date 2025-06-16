@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import downPdfs  # Make sure this file is in the same folder
 import os
+import readPdfs
 
 def submit():
     val1 = entry1.get().strip()
@@ -12,6 +13,7 @@ def submit():
         if not result:
             return
     downPdfs.main(val1, val2, val3)
+    readPdfs.saveAllText(val1)
     
 root = tk.Tk()
 root.title("Wider Form")
