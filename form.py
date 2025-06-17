@@ -8,6 +8,8 @@ import requests
 from googleapiclient.discovery import build
 import io
 from googleapiclient.http import MediaIoBaseDownload
+import re
+import sqlite3
 
 def getStatus():
     creds = credsa.authenticate(); service = build('drive', 'v3', credentials=creds)
@@ -29,26 +31,44 @@ def list_folders_in_folder(parent_folder_id):
     return ret
 
 def do_convert():
-    status=getStatus(); val1 = entry1.get().strip(); val2 = entry2.get().strip()       
-    val4 = entry4.get().strip() 
+    val1 = entry1.get().strip(); val2 = entry2.get().strip(); val4 = entry4.get().strip() 
     url = f'https://script.google.com/macros/s/{val2}/exec'
-    if status == 'run': 
-        print('running')
-        root.after(10000, do_convert)
-    elif status != 'done': 
-        data = {'folderId': val1, 'command': 'convert'}
+    data = {'folderId': val1, 'command': 'convert'}
+    while True:
         print('posted!!')
         response = requests.post(url, json=data)
         if response.ok:
-            print(response.text[0:200]); root.after(10000, do_convert)
-        else: print("❌ Error:", response.status_code)
-    else:
-        data = {'folderId': val1, 'command': 'down', 'subNames': val4 }
-        print(f'down {val4}')
-        response = requests.post(url, json=data)
-        if response.ok:
-            all_text=response.text
-            print(all_text)
+            if response.text != 'yet': break
+        else: print("❌ Error:", response.status_code); break
+    data = {'folderId': val1, 'command': 'down', 'subNames': val4 }
+    print(f'down {val4}')
+    response = requests.post(url, json=data)
+    if response.ok:
+        hh=response.headers.get('Content-Type')
+        if  'application/json' in hh:
+            data = response.json()
+            if data['success']:
+                all_text=data['allText']; lines = all_text.split('\n'); dic = {}; path = ''
+                for line in lines:
+                    line=line.strip()
+                    if line=='': continue
+                    match=re.match(r'(.+/.+/.+\.pdf)===(https://.+)', line); 
+                    if match: path=match.group(1); dic[path]= { 'url': match.group(2), 'text': ''}
+                    else: dic[path]['text'] += line + '\n'
+                conn = sqlite3.connect("ginza.db")
+                for path in dic:
+                    cursor = conn.cursor()
+                    cursor.execute("INSERT INTO pdf (path, text, url) VALUES (?, ?, ?)", (path, dic[path]['text'],dic[path]['url']))
+                    conn.commit()
+                conn.close()
+                print('inserted')
+
+
+            
+
+
+
+
 
 def delete_txt(folder_id, fn):
     creds = credsa.authenticate()
@@ -63,13 +83,7 @@ def delete_txt(folder_id, fn):
 def submit():
     val1 = entry1.get().strip() #folderId
     val2 = entry2.get().strip() #appId
-    val3 = entry3.get().strip() #sheetId   
-    status=getStatus()
-    if status== 'run':
-        messagebox.showinfo("Info", f"""<run> exists in {val1}: this is due to running process or 
-        remained file. If you've been not running, please erase it.""")
-        return
-    elif status == 'done': delete_txt('done') 
+    val3 = entry3.get().strip() #sheetId 
     do_convert()        
     
 root = tk.Tk()
