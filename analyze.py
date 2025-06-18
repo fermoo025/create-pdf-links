@@ -1,6 +1,7 @@
 import csv
 import re
 import readPdfs as rp
+import requests
 
 patPrefect = r"^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|東京都|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|京都府|大阪府|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)"
 dic = {}
@@ -88,30 +89,22 @@ def getFileFromPrice(pr):
     return fs
 
 
-def common(csvFil, pdfFolder):
-    allText = ""
-    dic = {}
-    fn = ""
-    invalidFiles = []
-    with open(f"{pdfFolder}/output.txt", "r") as file:
-        allText = file.read()
-    lines = allText.split("\n")
-    for line in lines:
-        line = line.strip()
-        if line == "":
-            continue
-        if line.endswith("================="):
-            fn = line.replace("=================", "")
-            dic[fn] = {"text": "", "price": 0}
-        else:
-            dic[fn]["text"] += line + "\n"
-    lines = []
-    with open(csvFil, newline="") as csvfile:
-        reader = csv.reader(csvfile)
-        for row in reader:
-            lines.append(row)
-    for fn in dic:
-        text = dic[fn]["text"]
+def common(conn, sheetId, sheetName, appId):
+    data = {'sheetId': sheetId, 'command': 'getCsv', 'sheetName': sheetName }
+    print(f'down sheet')
+    url = f'https://script.google.com/macros/s/{appId}/exec'
+    response = requests.post(url, json=data)
+    if response.ok:
+        hh=response.headers.get('Content-Type')
+        if  'application/json' in hh:
+            dat = response.json()
+            if dat['success']:
+                data=dat['data']; 
+    sql= "SELECT id, path, text, url FROM pdf WHERE sheet_id=''"; cursor = conn.cursor()
+    cursor.execute(sql); rows = cursor.fetchall(); invalidFiles = []
+    for row in rows:
+        fn=row['path']
+        text = row["text"]
         manMatch = re.search(
             r"価\s*格(?:[:\s]|\(\s*税\s*込\s*\))*([\d,億]+)\s*万", text, re.MULTILINE
         )
@@ -128,21 +121,19 @@ def common(csvFil, pdfFolder):
             )
             if yenMatch:
                 priceValue = int(yenMatch.group(1).replace(",", ""))
-        if priceValue > 0:
-            dic[fn]["price"] = priceValue
-        else:
-            invalidFiles.append(fn)
+        row["price"] = priceValue
+        if priceValue == 0: invalidFiles.append(fn)
     index = 0
-    lines = lines[1:]
-    for dat in lines:
-        txtPrice = rp.toHalfWidth(dat[8]).strip().replace(",", "")
+    for dat in data:
+        if dat[1]!='': continue;
+        txtPrice = rp.toHalfWidth(dat[3]).strip().replace(",", "")
         multi = 1
         if "万円" in txtPrice:
             txtPrice = txtPrice.replace("万円", "")
             multi = 10000
         price = int(float(txtPrice) * multi)
         fn = ""
-        addr = dat[6].strip()
+        addr = dat[2].strip()
         fs = getFileFromPrice(price)
         isPriceMatch = 0
         fa = []
@@ -151,14 +142,12 @@ def common(csvFil, pdfFolder):
             if price == 4180:
                 a += 1
             fa = getFileFromAddr(addr)
-            if fa.length == 1:
+            if len(fa) == 1:
                 fn = fa[0]
                 isPriceMatch = 1
-            elif len(fs) > 1:
+            elif len(fa) > 1:
                 fn = "MULTI_PRICE_ADDR"
                 isPriceMatch = 1
-            else:
-                fn = fa[0]
         if isPriceMatch == 0:
             if len(fs) > 1:
                 fn = "MULTI_PRICE"
