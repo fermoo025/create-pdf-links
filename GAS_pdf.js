@@ -163,37 +163,101 @@ function getPdfText(fil){
   return convertNFC(toHalfWidth(textRaw)).trim();
 }
 function updateStatus(content) {
-  const folderId = FOLDER_ID, fileName = "status.txt", folder = DriveApp.getFolderById(folderId);
-  const files = folder.getFilesByName(fileName);
-  if (files.hasNext()) { const file = files.next(); file.setContent(content); } 
+  const folderId = FOLDER_ID, folder = DriveApp.getFolderById(folderId);
+  const files=folder.getFilesByType(MimeType.PLAIN_TEXT)
+  while (files.hasNext()) { let file = files.next(); file.setTrashed(true); } 
+  folder.createFile( content + '.txt', '');
 }
-function convertPdfs(folderId){
+function convertPdfs(folderId, subFolders){
   FOLDER_ID = folderId;
   const pFolder = DriveApp.getFolderById(FOLDER_ID); 
-  updateStatus('run');
-  const tic=Date.now();
+  const tic=Date.now(); let subs= subFolders.split(',');
+  subs.forEach((sub,i,ar)=>{ ar[i]=sub.trim(); });
   var folders = pFolder.getFolders();
   while (folders.hasNext()) {
-    const folder = folders.next(), dic = {}, txtFns=[]; let files = folder.getFiles();
+    const folder = folders.next(), fName= folder.getName();
+    if( subs.indexOf( fName) ==-1) continue;
+    const dic = {}, txtFns=[]; let files = folder.getFiles();
     while (files.hasNext()) { 
-      const file=files.next(); let fn=file.getName(), ext=fn.substring(fn.length -3); fn=fn.substring(0, fn.length - 4 );
-      dic[fn] = 0; if( ext == 'txt') dic[fn] = 1;
+      const file=files.next(); let fn=file.getName();
+      let ext=fn.substring(fn.length -3); fn=fn.substring(0, fn.length - 4 );      
+      if( ext == 'txt')  dic[fn] = 1;  else if(dic[fn]==undefined) dic[fn] = 0; 
     }
     for( let fn in dic){
       if( dic[fn] == 0){
         const files=folder.getFilesByName(fn+'.pdf');
         const file = files.next(), text= getPdfText(file);
         folder.createFile(fn + '.txt', text);
-        if( Date.now() - tic > 300000 ) {  runFile.setTrashed(true); updateStatus('still'); return;  }// timeout;
+        if( Date.now() - tic > 300000 ) { // updateStatus('yet'); 
+          return 'yet';  }// timeout;
       }
     }  
   }
-  updateStatus('done'); 
+  return 'done'; //updateStatus('done'); 
+  console.log('done');
+}
+function downTexts(folderId, subNames){
+  FOLDER_ID = folderId;
+  const pFolder = DriveApp.getFolderById(FOLDER_ID), pName= pFolder.getName();
+  var folders = pFolder.getFolders(); let allText = '';
+  while (folders.hasNext()) {
+    const folder=folders.next(), fName=folder.getName();
+    if ( subNames.indexOf(fName)==-1 ) continue;
+    const files = folder.getFiles();
+    while( files.hasNext()){
+      const file = files.next(); let fn= file.getName(), pdfName= fn.substring(0, fn.length - 3)+'pdf'; 
+      if(!fn.endsWith('.txt')) continue;
+      const pdfs= folder.getFilesByName(pdfName); 
+      const pdfFile=pdfs.next(), url = pdfFile.getUrl(); 
+      allText += `${pName}/${fName}/${pdfName}===${url}\n`;
+      allText += file.getBlob().getDataAsString()+"\n"; 
+    }
+  }
+  return allText;
+}
+function doGet(e) {
+  const html = `
+    <html>
+      <head><title>Sample</title></head>
+      <body>
+        <h1>Hello from GAS</h1>
+        <p>This is a long HTML message.</p>
+        <!-- You can insert more HTML here -->
+      </body>
+    </html>
+  `;
+  return ContentService.createTextOutput(html)
+    .setMimeType(ContentService.MimeType.HTML);
 }
 function doPost(e) {
   var data = JSON.parse(e.postData.contents);
-  if(data.command == 'convert') convertPdfs(data.folderId);  
-  return ContentService.createTextOutput(data.command + '|'+data.folderId);
+  if(data.command == 'convert'){ const ret = convertPdfs(data.folderId, data.subFolders);  
+    return ContentService.createTextOutput(ret);
+  }  else if(data.command == 'down'){
+    let subs=data.subNames.trim().split(',');
+    subs.forEach((sub,i,ar)=>{ ar[i]=sub.trim(); });
+    const allText = downTexts(data.folderId, subs ); 
+    const responseData = { success: true,allText: allText } // Raw POST content
+    return ContentService .createTextOutput(JSON.stringify(responseData)) .setMimeType(ContentService.MimeType.JSON);
+  }else if ( data.command == 'getCsv')  {
+    const sheetId=data.sheetId, sheetName=data.sheetName; 
+    var spreadsheet = SpreadsheetApp.openById(sheetId), rows = [];
+    var sheet = spreadsheet.getSheetByName(sheetName);
+    var data = sheet.getDataRange().getValues(); data.shift();
+    for (var i = 0; i < data.length; i++) {
+       rows.push([ i, data[i][2], data[i][5], data[i][7] ]); // 2,6,8?
+       }
+    const responseData = { success: true,data: rows } // Raw POST content
+    return ContentService .createTextOutput(JSON.stringify(responseData)) .setMimeType(ContentService.MimeType.JSON);
+  }else if( data.command == 'setCsv'){
+    const sheetId=data.sheetId, sheetName=data.sheetName; 
+    var spreadsheet = SpreadsheetApp.openById(sheetId);
+    var sheet = spreadsheet.getSheetByName(sheetName);
+    let rows= data.rows;
+    rows.forEach(row=>{ let ind=row[0]; sheet.getRange(ind+2, 3).setValue(row[1]);  });
+    const responseData = { success: true,data: rows.length } // Raw POST content
+    return ContentService .createTextOutput(JSON.stringify(responseData)) .setMimeType(ContentService.MimeType.JSON);
+  }
 }
 function matchPdfUsingINumericPrice() {
 
@@ -263,10 +327,10 @@ function common() {
            if (fa.length == 1) {
                fn = fa[0];
                isPriceMatch = 1;
-           } else if (fs.length > 1) {
+           } else if (fa.length > 1) {
                fn = 'MULTI_PRICE_ADDR';
                isPriceMatch = 1;
-           } else fn = fa[0];
+           } //else fn = fa[0];
        }
        if (isPriceMatch == 0) {
            if (fs.length > 1) {
