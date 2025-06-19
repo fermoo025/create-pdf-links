@@ -1,6 +1,3 @@
-from PyPDF2 import PdfReader
-import pdfplumber
-from pdfminer.high_level import extract_text
 import glob
 import sys
 import re
@@ -8,16 +5,7 @@ import os
 import csv
 import time
 
-def readPdf1(fileName):
-    reader = PdfReader(fileName)
-    return "".join([page.extract_text() for page in reader.pages])
 
-def readPdf2(fileName):
-    with pdfplumber.open(fileName) as pdf:
-        return "\n".join([page.extract_text() for page in pdf.pages])
-
-def readPdf3(fileName):
-    return extract_text(fileName)
 
 def convertNFC(txt):
     radicalToStandard = {
@@ -240,22 +228,3 @@ def toHalfWidth(str):
     str = str.replace('　', ' ')
     return re.sub(r'[０-９]', lambda m: chr(ord(m.group(0)) - 0xFEE0), str)
 
-def saveAllText(folder):
-    os.chdir(folder)
-    tic=time.time()
-    files = glob.glob('*.pdf')  # Change pattern as needed
-    sys.stderr = open(os.devnull, 'w')
-    allText=''
-    for fn in files:
-        textRaw = readPdf3(fn)
-        text = convertNFC(toHalfWidth(textRaw)).strip()
-        allText += fn + '=================\n'+text+'\n'
-        print(fn)
-        if text == '':
-            continue
-    with open("output.txt", "w", encoding='utf-8') as file:
-        file.write(allText)
-    print(f'Converted in {time.time()-tic}')
-    os.chdir('..')
-if __name__ == '__main__':
-    saveAllText('1c6l8cZRLqtbeyyvKlp9Nm2xOJHNkaDBf')    
