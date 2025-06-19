@@ -9,6 +9,10 @@ patPrefect = r"^(北海道|青森県|岩手県|宮城県|秋田県|山形県|福
 dic = {}
 invalidFiles = []
 
+def toHalfWidth(str):
+    str = str.replace('：', ':')
+    str = str.replace('　', ' ')
+    return re.sub(r'[０-９]', lambda m: chr(ord(m.group(0)) - 0xFEE0), str)
 
 def getDisp(v, ib=0):
     nn = v
@@ -28,7 +32,7 @@ def getDisp(v, ib=0):
 def getFileFromAddr(addr):
     
     fs = []
-    addr = rp.toHalfWidth(addr)
+    addr = toHalfWidth(addr)
     addr = addr.replace("丁目", "")
     addr2 = re.sub(patPrefect, "", addr)
     addr3 = addr2
@@ -137,7 +141,7 @@ def common(dictn, sheetId, sheetName, appId, tka):
     for dat in data:
         if dat[1].strip()!='' or dat[2].strip()=='': 
             index +=1; continue;
-        txtPrice = rp.toHalfWidth(dat[3]).strip().replace(",", "")
+        txtPrice = toHalfWidth(dat[3]).strip().replace(",", "")
         multi = 1
         if "万円" in txtPrice:
             txtPrice = txtPrice.replace("万円", "")
