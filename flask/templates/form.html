@@ -1,67 +1,101 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <title>Simple Form</title>
-    </head>
-    <body>
+    <head><title>Progress Tracker</title></head>
+    <body onload="loaded()">
         <h2>Enter your data:</h2>
         <form method="POST">
             <table>
                 <tr>
                     <td><label for="appId">App ID</label></td>
-                    <td><input type="text" name="appId" size="100"
-                            value="AKfycbwM5zKfSCh7Rx4S3uu7fGxE98xT8K8zWUgIQMszA0M6AH9xiMxMMKu9ExPFiA98YD70mQ"
+                    <td><input type="text" name="appId" id="appId" size="100"
+                            value="AKfycbwpLQSggVwrUtWd1Ygs26MMM2iF7Gpmn8HuNID_EIzBG2ObZs976Byq_VkRmibuhdHu"                            
                             required></td>
                 </tr>
                 <tr>
                     <td><label for="folderId">Folder ID</label></td>
-                    <td><input type="text" name="folderId" size="100"
-                            value="1T6p8TBxikn8LIYrilCTxaplqwF9nfVGB"
+                    <td><input type="text" name="folderId" id="folderId"
+                            size="100"
+                            value="1jlXkIMCa-rmWJZG0lwbAlKbixw-DI7y3"
                             required></td>
                 </tr>
                 <tr>
                     <td><label for="subFolders">Sub Folders</label></td>
-                    <td><input type="text" name="subFolders" size="100"
-                            value="250612,250614" required></td>
+                    <td><input type="text" name="subFolders" id="subFolders"
+                            size="100"
+                            value="25 250614 250615" required></td>
                 </tr>
                 <tr>
                     <td><label for="sheetId">Sheet ID</label></td>
-                    <td><input type="text" name="sheetId" size="100"
+                    <td><input type="text" name="sheetId" id="sheetId"
+                            size="100"
                             value="1CVAAilMvM8LsrZIelRz6nf4SRvFeoawGonw6L4QlSC8"
                             required></td></tr>
                 <tr>
                     <td><label for="tabName">Tab Name</label></td>
-                    <td><input type="text" name="tabName" value="2506"
+                    <td><input type="text" name="tabName" id="tabName"
+                            value="Sheet1"
                             required></td>
                 </tr>
-                <tr><td colspan="2"><input type="submit"
-                            value="Submit"></td></tr>
             </table>
         </form>
+        <button onclick="startProcess()">Start</button>
+        <p id="status">Status: Idle</p>
         <h3>Message:</h3>
         <textarea id="result" style="width:500px; height: 400px; "></textarea>
+
+        <script>
+            function loaded(){
+                let inputs = ['appId','folderId','subFolders','sheetId','tabName'];
+                inputs.forEach(input=>{
+                    document.getElementById(input).addEventListener('change',function(){
+                        localStorage.setItem(this.id, this.value);
+                    });
+                    let val = localStorage.getItem(input);
+                    if(val){ document.getElementById(input).value = val; }
+                });
+
+            }
+            function addMsg(m){
+                document.getElementById('result').value += m+'\n';
+            }    
+    var tryNum = 0;
+
+    const RETRY_DELAY = 5000; // 5 seconds
+
+    function startProcess() {
+      sendRequest();
+    }
+
+    function sendRequest() {
+        if (++tryNum > 12){ addMsg("tried 12 times. Please press F5 and click Start to retry."); return; }
+        const requestData = {
+      appId: document.getElementById('appId').value.trim(),
+      folderId: document.getElementById('folderId').value.trim(),
+      subFolders: document.getElementById('subFolders').value.trim(),
+      sheetId: document.getElementById('sheetId').value.trim(),
+      tabName: document.getElementById('tabName').value.trim()
+    };
+        addMsg("Status: Posting...");
+      fetch("http://127.0.0.1:5000/proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(requestData)
+      })
+      .then(res => res.json())
+      .then(data => {
+        console.log(data);
+        if (data.gas_response === "completed") {
+          addMsg( "Status: DONE ✅");
+        } else {
+          addMsg("Status: Still working... retrying=="+ data.gas_response);
+          setTimeout(sendRequest, RETRY_DELAY);
+        }
+      })
+      .catch(err => {
+        addMsg("Status: ERROR=="+err);
+        setTimeout(sendRequest, RETRY_DELAY); // Optional: retry even on failure
+      });
+    }
+  </script>
     </body>
 </html>
-<script>
-    function addMsg(m){
-        document.getElementById('result').innerText += m+'\n';
-    }
-    function sendData() {
-        const appId = document.getElementById('appId').value;
-        const folderId = document.getElementById('folderId').value;
-        const subFolders = document.getElementById('subFolders').value;
-        const sheetId = document.getElementById('sheetId').value;
-        const tabName = document.getElementById('tabName').value;
-        addMsg('posted convert!');
-        fetch('/convert', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ appId, folderId, subFolders, sheetId, tabName })
-        })
-        .then(response => response.json())
-        .then(data => {
-            addMsg(data.message);
-            if( data)
-        });
-    }
-</script>
